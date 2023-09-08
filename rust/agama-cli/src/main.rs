@@ -7,6 +7,7 @@ mod printers;
 mod profile;
 mod progress;
 mod questions;
+mod wicked;
 
 use crate::error::CliError;
 use agama_lib::error::ServiceError;
@@ -19,6 +20,7 @@ use printers::Format;
 use profile::run as run_profile_cmd;
 use progress::InstallerProgress;
 use questions::run as run_questions_cmd;
+use wicked::run as run_wicked_cmd;
 use std::{
     process::{ExitCode, Termination},
     thread::sleep,
@@ -131,6 +133,7 @@ async fn run_command(cli: Cli) -> anyhow::Result<()> {
             block_on(install(&manager, 3))
         }
         Commands::Questions(subcommand) => block_on(run_questions_cmd(subcommand)),
+        Commands::Wicked(subcommand) => block_on(run_wicked_cmd(subcommand, cli.format)),
         _ => unimplemented!(),
     }
 }
