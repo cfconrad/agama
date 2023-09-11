@@ -69,7 +69,10 @@ pub struct Address {
 
 impl Into<NetworkConnection> for Interface {
     fn into(self) -> NetworkConnection {
-        let method = if self.ipv4_static.is_some() { "manual" } else { "auto" };
+        let method = if self.ipv4.enabled && self.ipv4_static.is_some() { "manual" }
+        else if !self.ipv4.enabled { "disabled" }
+        else { "auto" };
+
         let mut nc = NetworkConnection {
             id: self.name,
             method: Some(method.into()),
