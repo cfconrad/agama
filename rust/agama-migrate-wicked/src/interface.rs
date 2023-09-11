@@ -9,10 +9,10 @@ pub struct Interface {
     pub firewall: Firewall,
     pub link: Link,
     pub ipv4: Ipv4,
-    #[serde(rename = "ipv4-static")]
+    #[serde(rename = "ipv4-static", skip_serializing_if = "Option::is_none")]
     pub ipv4_static: Option<Ipv4Static>,
     pub ipv6: Ipv6,
-    #[serde(rename = "ipv6-static")]
+    #[serde(rename = "ipv6-static", skip_serializing_if = "Option::is_none")]
     pub ipv6_static: Option<Ipv6Static>,
 }
 
