@@ -1,17 +1,7 @@
 use crate::error::CliError;
 use crate::printers::{print, Format};
 use std::io;
-// use agama_lib::connection;
-// use crate::printers::{print, Format};
-// use agama_lib::connection;
-// use agama_lib::install_settings::{InstallSettings, Scope};
-// use agama_lib::Store as SettingsStore;
-// use agama_settings::{settings::Settings, SettingObject, SettingValue};
 use clap::Subcommand;
-// use convert_case::{Case, Casing};
-// use std::str::FromStr;
-// use std::{collections::HashMap, error::Error, io};
-//use agama_read_wicked::hi_from_read_wicked as show_wicked;
 use agama_migrate_wicked::reader::read_dir as wicked_read_dir;
 use agama_migrate_wicked::migrate::migrate;
 
