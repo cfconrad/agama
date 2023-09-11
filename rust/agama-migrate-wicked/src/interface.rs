@@ -82,3 +82,33 @@ impl Into<NetworkConnection> for Interface {
         return nc
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_static_interface_to_network_connection() {
+        let static_interface = Interface {
+            ipv4: Ipv4 { enabled: true, ..Default::default() },
+            ipv4_static: Some(Ipv4Static { address: Address{ local: "127.0.0.1/8".to_string() } }),
+            ..Default::default()
+        };
+
+        let static_connection: NetworkConnection = static_interface.into();
+        assert_eq!(static_connection.method, Some("manual".to_string()));
+        assert_eq!(static_connection.addresses[0], "127.0.0.1/8");
+    }
+
+    #[test]
+    fn test_dhcp_interface_to_network_connection() {
+        let static_interface = Interface {
+            ipv4: Ipv4 { enabled: true, ..Default::default() },
+            ..Default::default()
+        };
+
+        let static_connection: NetworkConnection = static_interface.into();
+        assert_eq!(static_connection.method, Some("auto".to_string()));
+        assert_eq!(static_connection.addresses.len(), 0);
+    }
+}
