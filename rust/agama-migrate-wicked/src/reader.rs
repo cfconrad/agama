@@ -6,8 +6,8 @@ use regex::Regex;
 use crate::interface::Interface;
 
 
-pub fn read_xml(file_path: PathBuf) -> Result<Interface, quick_xml::DeError> {
-    let contents = fs::read_to_string(file_path)
+pub fn read_xml(path: PathBuf) -> Result<Interface, quick_xml::DeError> {
+    let contents = fs::read_to_string(path)
         .expect("Should have been able to read the file");
     // TODO better error handling when xml parsing failed
     let interface: Interface = from_str(replace_colons(contents).as_str())?;
@@ -20,8 +20,8 @@ fn replace_colons(colon_string: String) -> String {
     return replaced;
 }
 
-pub async fn read_dir(directory: String) -> Result<Vec<Interface>, io::Error>{
-    let interfaces = fs::read_dir(directory)?
+pub async fn read_dir(path: PathBuf) -> Result<Vec<Interface>, io::Error>{
+    let interfaces = fs::read_dir(path)?
         .map(|res| res.map(|e| read_xml(e.path()).unwrap()))
         .collect::<Result<Vec<_>, io::Error>>()?;
     Ok(interfaces)

@@ -22,13 +22,12 @@ pub async fn run(subcommand: WickedCommands, format: Format) -> anyhow::Result<(
     let command = parse_wicked_command(subcommand)?;
     match command {
         WickedAction::Show(path) => {
-            let interfaces = wicked_read_dir(path).await?;
+            let interfaces = wicked_read_dir(path.into()).await?;
             print(interfaces, io::stdout(), format)?;
             Ok(())
         },
         WickedAction::Migrate(path) => {
-            let interfaces = wicked_read_dir(path).await?;
-            migrate(interfaces).await;
+            migrate(path).await.unwrap();
             Ok(())
         }
     }

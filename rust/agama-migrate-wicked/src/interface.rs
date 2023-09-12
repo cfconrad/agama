@@ -1,5 +1,7 @@
-use agama_lib::network::settings::NetworkConnection;
+use std::str::FromStr;
 use serde::{Deserialize, Serialize};
+use agama_dbus_server::network::model::{self, IpAddress, Ipv4Config, IpMethod};
+use agama_lib::network::types::DeviceType;
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -67,19 +69,26 @@ pub struct Address {
     pub local: String,
 }
 
-impl Into<NetworkConnection> for Interface {
-    fn into(self) -> NetworkConnection {
+impl Into<model::Connection> for Interface {
+    fn into(self) -> model::Connection {
+        let mut con = model::Connection::new(self.name.clone(), DeviceType::Ethernet);
+        let base_connection = con.base_mut();
+        base_connection.ipv4 = self.into();
+        con
+    }
+}
+
+impl Into<Ipv4Config> for Interface {
+    fn into(self) -> Ipv4Config {
         let method = if self.ipv4.enabled && self.ipv4_static.is_some() { "manual" }
         else if !self.ipv4.enabled { "disabled" }
         else { "auto" };
 
-        let mut nc = NetworkConnection {
-            id: self.name,
-            method: Some(method.into()),
-            ..Default::default()
-        };
-        if self.ipv4_static.is_some() { nc.addresses = vec![self.ipv4_static.unwrap().address.local]; }
-        return nc
+        let mut ipv4 = Ipv4Config::default();
+        if self.ipv4_static.is_some() { ipv4.addresses = vec![IpAddress::from_str(&self.ipv4_static.unwrap().address.local.as_str()).unwrap()] }
+        ipv4.method = IpMethod::from_str(method).unwrap();
+
+        ipv4
     }
 }
 
@@ -88,27 +97,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_static_interface_to_network_connection() {
+    fn test_static_interface_to_connection() {
         let static_interface = Interface {
             ipv4: Ipv4 { enabled: true, ..Default::default() },
             ipv4_static: Some(Ipv4Static { address: Address{ local: "127.0.0.1/8".to_string() } }),
             ..Default::default()
         };
 
-        let static_connection: NetworkConnection = static_interface.into();
-        assert_eq!(static_connection.method, Some("manual".to_string()));
-        assert_eq!(static_connection.addresses[0], "127.0.0.1/8");
+        let static_connection: model::Connection = static_interface.into();
+        assert_eq!(static_connection.base().ipv4.method, IpMethod::Manual);
+        assert_eq!(static_connection.base().ipv4.addresses[0].to_string(), "127.0.0.1/8");
     }
 
     #[test]
-    fn test_dhcp_interface_to_network_connection() {
+    fn test_dhcp_interface_to_connection() {
         let static_interface = Interface {
             ipv4: Ipv4 { enabled: true, ..Default::default() },
             ..Default::default()
         };
 
-        let static_connection: NetworkConnection = static_interface.into();
-        assert_eq!(static_connection.method, Some("auto".to_string()));
-        assert_eq!(static_connection.addresses.len(), 0);
+        let static_connection: model::Connection = static_interface.into();
+        assert_eq!(static_connection.base().ipv4.method, IpMethod::Auto);
+        assert_eq!(static_connection.base().ipv4.addresses.len(), 0);
     }
 }

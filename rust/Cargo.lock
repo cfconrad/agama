@@ -92,7 +92,9 @@ dependencies = [
 name = "agama-migrate-wicked"
 version = "0.1.0"
 dependencies = [
+ "agama-dbus-server",
  "agama-lib",
+ "async-std",
  "quick-xml",
  "regex",
  "serde",

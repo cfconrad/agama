@@ -1,21 +1,43 @@
-use agama_lib::network::settings::NetworkConnection;
-use agama_lib::network::NetworkClient;
-use agama_lib::connection;
-use crate::interface::Interface;
+use crate::reader::read_dir as wicked_read_dir;
+use agama_dbus_server::network::{model, Adapter, NetworkManagerAdapter, NetworkState};
+use std::error::Error;
+use std::path::PathBuf;
 
-pub async fn migrate(interfaces: Vec<Interface>) {
-    let network = NetworkClient::new(connection().await.unwrap()).await.unwrap();
+struct WickedAdapter {
+    path: PathBuf,
+}
 
-    //debug
-    println!("before: {:?}",network.connections().await.unwrap());
+impl WickedAdapter {
+    pub fn new(path: &str) -> Self {
+        Self {
+            path: path.into(),
+        }
+    }
+}
 
-    for interface in interfaces {
-        let nc: NetworkConnection = interface.into();
-        network.add_or_update_connection(&nc).await.unwrap();
-    };
+impl Adapter for WickedAdapter {
+    fn read(&self) -> Result<model::NetworkState, Box<dyn std::error::Error>> {
+        async_std::task::block_on(async {
+            let interfaces = wicked_read_dir(self.path.clone()).await?;
+            let mut state = NetworkState::new(vec![], vec![]);
 
-    //debug
-    println!("after: {:?}",network.connections().await.unwrap());
+            for interface in interfaces {
+                let conn: model::Connection = interface.into();
+                state.add_connection(conn)?;
+            }
+            Ok(state)
+        })
+    }
 
-    network.apply().await.unwrap();
+    fn write(&self, _network: &model::NetworkState) -> Result<(), Box<dyn std::error::Error>> {
+        unimplemented!("not needed");
+    }
+}
+
+pub async fn migrate(path: String) -> Result<(), Box<dyn Error>> {
+    let wicked = WickedAdapter::new(&path);
+    let state = wicked.read()?;
+    let nm = NetworkManagerAdapter::from_system().await?;
+    nm.write(&state)?;
+    Ok(())
 }
