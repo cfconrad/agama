@@ -234,6 +234,9 @@ fn base_connection_from_dbus(conn: &OwnedNestedHash) -> Option<BaseConnection> {
     if let Some(ipv4) = conn.get("ipv4") {
         base_connection.ipv4 = ipv4_config_from_dbus(ipv4)?;
     }
+    if let Some(ipv6) = conn.get("ipv6") {
+        base_connection.ipv6 = ipv6_config_from_dbus(ipv6)?;
+    }
 
     Some(base_connection)
 }
@@ -310,6 +313,40 @@ fn ipv4_config_from_dbus(ipv4: &HashMap<String, zvariant::OwnedValue>) -> Option
     }
 
     Some(ipv4_config)
+}
+
+fn ipv6_config_from_dbus(ipv6: &HashMap<String, zvariant::OwnedValue>) -> Option<Ipv6Config> {
+    let method: &str = ipv6.get("method")?.downcast_ref()?;
+    let address_data = ipv6.get("address-data")?;
+    let address_data = address_data.downcast_ref::<zbus::zvariant::Array>()?;
+    let mut addresses: Vec<Ipv6Address> = vec![];
+    for addr in address_data.get() {
+        let dict = addr.downcast_ref::<zvariant::Dict>()?;
+        let map = <HashMap<String, zvariant::Value<'_>>>::try_from(dict.clone()).unwrap();
+        let addr_str: &str = map.get("address")?.downcast_ref()?;
+        let prefix: &u32 = map.get("prefix")?.downcast_ref()?;
+        addresses.push(Ipv6Address::new(addr_str.parse().unwrap(), *prefix))
+    }
+    let mut ipv6_config = Ipv6Config {
+        method: NmMethod(method.to_string()).try_into().ok()?,
+        addresses,
+        ..Default::default()
+    };
+
+    if let Some(dns_data) = ipv6.get("dns-data") {
+        let dns_data = dns_data.downcast_ref::<zbus::zvariant::Array>()?;
+        for server in dns_data.get() {
+            let server: &str = server.downcast_ref()?;
+            ipv6_config.nameservers.push(server.parse().unwrap());
+        }
+    }
+
+    if let Some(gateway) = ipv6.get("gateway") {
+        let gateway: &str = gateway.downcast_ref()?;
+        ipv6_config.gateway = Some(gateway.parse().unwrap());
+    }
+
+    Some(ipv6_config)
 }
 
 fn wireless_config_from_dbus(conn: &OwnedNestedHash) -> Option<WirelessConfig> {

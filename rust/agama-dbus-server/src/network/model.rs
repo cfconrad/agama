@@ -8,7 +8,7 @@ use crate::network::error::NetworkStateError;
 use agama_lib::network::types::{DeviceType, SSID};
 use std::{
     fmt,
-    net::{AddrParseError, Ipv4Addr},
+    net::{AddrParseError, Ipv4Addr, Ipv6Addr},
     str::{self, FromStr},
 };
 use thiserror::Error;
@@ -282,6 +282,14 @@ impl Connection {
         &mut self.base_mut().ipv4
     }
 
+    pub fn ipv6(&self) -> &Ipv6Config {
+        &self.base().ipv6
+    }
+
+    pub fn ipv6_mut(&mut self) -> &mut Ipv6Config {
+        &mut self.base_mut().ipv6
+    }
+
     pub fn match_config(&self) -> &MatchConfig {
         &self.base().match_config
     }
@@ -309,6 +317,7 @@ pub struct BaseConnection {
     pub id: String,
     pub uuid: Uuid,
     pub ipv4: Ipv4Config,
+    pub ipv6: Ipv6Config,
     pub status: Status,
     pub interface: String,
     pub match_config: MatchConfig,
@@ -333,6 +342,14 @@ pub struct Ipv4Config {
     pub addresses: Vec<IpAddress>,
     pub nameservers: Vec<Ipv4Addr>,
     pub gateway: Option<Ipv4Addr>,
+}
+
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct Ipv6Config {
+    pub method: IpMethod,
+    pub addresses: Vec<Ipv6Address>,
+    pub nameservers: Vec<Ipv6Addr>,
+    pub gateway: Option<Ipv6Addr>,
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
@@ -554,6 +571,60 @@ impl FromStr for IpAddress {
 }
 
 impl fmt::Display for IpAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{}", self.0, self.1)
+    }
+}
+
+/// Represents an IPv6 address with a prefix.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Ipv6Address(Ipv6Addr, u32);
+
+impl Ipv6Address {
+    /// Returns an new IpAddress object
+    ///
+    /// * `addr`: IPv6 address.
+    /// * `prefix`: IPv6 address prefix.
+    pub fn new(addr: Ipv6Addr, prefix: u32) -> Self {
+        Ipv6Address(addr, prefix)
+    }
+
+    /// Returns the IPv4 address.
+    pub fn addr(&self) -> &Ipv6Addr {
+        &self.0
+    }
+
+    /// Returns the prefix.
+    pub fn prefix(&self) -> u32 {
+        self.1
+    }
+}
+
+impl From<Ipv6Address> for (String, u32) {
+    fn from(value: Ipv6Address) -> Self {
+        (value.0.to_string(), value.1)
+    }
+}
+
+impl FromStr for Ipv6Address {
+    type Err = ParseIpAddressError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let Some((address, prefix)) = s.split_once('/') else {
+            return Err(ParseIpAddressError::MissingPrefix);
+        };
+
+        let address: Ipv6Addr = address.parse().map_err(ParseIpAddressError::InvalidAddr)?;
+
+        let prefix: u32 = prefix
+            .parse()
+            .map_err(|_| ParseIpAddressError::InvalidPrefix(prefix.to_string()))?;
+
+        Ok(Ipv6Address(address, prefix))
+    }
+}
+
+impl fmt::Display for Ipv6Address {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{}", self.0, self.1)
     }
