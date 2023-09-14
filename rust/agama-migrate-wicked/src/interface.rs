@@ -71,6 +71,7 @@ impl Into<model::Connection> for Interface {
     fn into(self) -> model::Connection {
         let mut con = model::Connection::new(self.name.clone(), DeviceType::Ethernet);
         let base_connection = con.base_mut();
+        base_connection.interface = self.name.clone();
         base_connection.ipv4 = self.into();
         con
     }
