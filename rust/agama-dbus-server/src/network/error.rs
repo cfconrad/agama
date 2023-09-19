@@ -16,6 +16,8 @@ pub enum NetworkStateError {
     InvalidIpMethod(u8),
     #[error("Invalid wireless mode: '{0}'")]
     InvalidWirelessMode(String),
+    #[error("Invalid bonding mode: '{0}'")]
+    InvalidBondingMode(String),
     #[error("Connection '{0}' already exists")]
     ConnectionExists(Uuid),
     #[error("Invalid security wireless protocol: '{0}'")]

@@ -1,6 +1,7 @@
-use agama_dbus_server::network::model::{self, IpAddress, IpMethod, Ipv4Config};
+use agama_dbus_server::network::model::{self, IpAddress, IpMethod, Ipv4Config, 
+    BondingMode, MiimonConfig};
 use agama_lib::network::types::DeviceType;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::str::FromStr;
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
@@ -16,6 +17,14 @@ pub struct Interface {
     pub ipv6: Ipv6,
     #[serde(rename = "ipv6-static", skip_serializing_if = "Option::is_none")]
     pub ipv6_static: Option<Ipv6Static>,
+    
+//    #[serde(rename = "ipv6-dhcp", skip_serializing_if = "Option::is_none")]
+//    pub ipv6_dhcp: Option<Ipv6Static>,
+
+    #[serde(rename = "ipv4-dhcp", skip_serializing_if = "Option::is_none")]
+    pub ipv4_dhcp: Option<Ipv4Dhcp>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bond: Option<Bond>,
 }
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
@@ -57,6 +66,21 @@ pub struct Ipv4Static {
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
+pub struct Ipv4Dhcp {
+    pub enabled: bool,
+    pub flags: String,
+    pub update: String,
+    #[serde(rename = "defer-timeout")]
+    pub defer_timeout: i32,
+    #[serde(rename = "recover-lease")]
+    pub recover_lease: bool,
+    #[serde(rename = "release-lease")]
+    pub release_lease: bool,
+}
+
+
+#[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Ipv6Static {
     pub address: Address,
 }
@@ -67,13 +91,79 @@ pub struct Address {
     pub local: String,
 }
 
+#[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct Bond {
+    pub mode: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub miimon: Option<Miimon>,
+    #[serde(deserialize_with = "unwrap_slaves")]
+    pub slaves: Vec<Slave>,
+}
+
+#[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct Slave {
+    pub device: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub primary: Option<bool>,
+}
+
+#[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct Miimon {
+    pub frequency: u32,
+    #[serde(rename = "carrier-detect")]
+    pub carrier_detect: String,
+}
+
+fn unwrap_slaves<'de, D>(deserializer: D) -> Result<Vec<Slave>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
+    struct Slaves {
+        // default allows empty list
+        #[serde(default)]
+        slave: Vec<Slave>,
+    }
+    Ok(Slaves::deserialize(deserializer)?.slave)
+}
+
 impl Into<model::Connection> for Interface {
     fn into(self) -> model::Connection {
-        let mut con = model::Connection::new(self.name.clone(), DeviceType::Ethernet);
-        let base_connection = con.base_mut();
-        base_connection.interface = self.name.clone();
-        base_connection.ipv4 = self.into();
-        con
+
+        let mut base = model::BaseConnection { 
+                id: self.name.clone(), 
+                interface: self.name.clone(),
+                ipv4: self.into(),
+                ..Default::default() 
+        };
+
+        if let Some(b) = &self.bond {
+
+            let mut bond = model::BondingConfig {
+                ..Default::default() 
+            };
+
+            bond.mode =  BondingMode::try_from(b.mode.as_str()).unwrap();
+
+            if let Some(m) = &b.miimon {
+                bond.miimon = Some(MiimonConfig {
+                    frequency: m.frequency,
+                    ..Default::default()
+                });
+            }
+
+            return model::Connection::Bonding(model::BondingConnection {
+                base: base,
+                bonding: bond,
+                ..Default::default()
+            })
+
+        } else {
+            return model::Connection::Ethernet(model::EthernetConnection {
+                base: base,
+                ..Default::default()
+            });
+        }
     }
 }
 

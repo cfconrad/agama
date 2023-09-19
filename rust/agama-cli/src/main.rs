@@ -152,6 +152,7 @@ impl Termination for CliResult {
     }
 }
 
+
 #[async_std::main]
 async fn main() -> CliResult {
     let cli = Cli::parse();

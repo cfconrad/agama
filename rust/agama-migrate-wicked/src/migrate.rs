@@ -37,7 +37,9 @@ impl Adapter for WickedAdapter {
 pub async fn migrate(path: String) -> Result<(), Box<dyn Error>> {
     let wicked = WickedAdapter::new(&path);
     let state = wicked.read()?;
+
     let nm = NetworkManagerAdapter::from_system().await?;
+    println!("{:?}", state.connections);
     nm.write(&state)?;
     Ok(())
 }

@@ -38,6 +38,14 @@ pub fn connection_to_dbus(conn: &Connection) -> NestedHash {
         }
     }
 
+    if let Connection::Bonding(bond) = conn {
+        connection_dbus.insert("type", "bonding".into());
+        let bond_dbus = bonding_config_to_dbus(bond);
+        for (k, v) in bond_dbus {
+            result.insert(k, v);
+        }
+    }
+
     result.insert("connection", connection_dbus);
     result
 }
@@ -172,6 +180,29 @@ fn wireless_config_to_dbus(conn: &WirelessConnection) -> NestedHash {
         ("802-11-wireless-security", security),
     ])
 }
+
+fn bonding_config_to_dbus(conn: &BondingConnection) -> NestedHash {
+    let config = &conn.bonding;
+    let mut options = String::from("mode=");
+    options.push_str(&config.mode.to_string());
+
+    if config.miimon.is_some() {
+        options.push_str(&format!(",miimon={}", config.miimon.as_ref().unwrap().frequency));
+    }
+
+    let bonding: HashMap<&str, zvariant::Value> = HashMap::from([
+
+        // mode=active-backup,downdelay=0,miimon=100,primary=enp7s0,updelay=0
+          ("options", Value::new(options))
+//        ("mode", Value::new(config.mode.to_string())),
+//        ("ssid", Value::new(config.ssid.to_vec())),
+    ]);
+
+    NestedHash::from([
+        ("bond", bonding),
+    ])
+}
+
 
 /// Converts a MatchConfig struct into a HashMap that can be sent over D-Bus.
 ///
