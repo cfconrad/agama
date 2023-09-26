@@ -14,20 +14,26 @@ use uuid::Uuid;
 use zbus::zvariant::{self, OwnedValue, Value};
 
 const ETHERNET_KEY: &str = "802-3-ethernet";
+const BONDING_KEY: &str = "bond";
 const WIRELESS_KEY: &str = "802-11-wireless";
 const WIRELESS_SECURITY_KEY: &str = "802-11-wireless-security";
 const LOOPBACK_KEY: &str = "loopback";
 
 /// Converts a connection struct into a HashMap that can be sent over D-Bus.
 ///
+/// * `net`: The full NetworkState -- used for correlations between interfaces.
 /// * `conn`: Connection to convert.
-pub fn connection_to_dbus(conn: &Connection) -> NestedHash {
+pub fn connection_to_dbus<'a>(net: &'a NetworkState, conn: &'a Connection) -> NestedHash<'a>{
     let mut result = NestedHash::new();
     let mut connection_dbus = HashMap::from([
         ("id", conn.id().into()),
         ("type", ETHERNET_KEY.into()),
         ("interface-name", conn.interface().into()),
     ]);
+    if let Some(master) = &conn.base().master {
+        connection_dbus.insert("master", master.into());
+        connection_dbus.insert("slave-type", find_slave_type(net, master).unwrap().into());
+    }
     result.insert("ipv4", ip_config_to_ipv4_dbus(conn.ip_config()));
     result.insert("ipv6", ip_config_to_ipv6_dbus(conn.ip_config()));
     result.insert("match", match_config_to_dbus(conn.match_config()));
@@ -36,6 +42,14 @@ pub fn connection_to_dbus(conn: &Connection) -> NestedHash {
         connection_dbus.insert("type", WIRELESS_KEY.into());
         let wireless_dbus = wireless_config_to_dbus(wireless);
         for (k, v) in wireless_dbus {
+            result.insert(k, v);
+        }
+    }
+
+    if let Connection::Bonding(bond) = conn {
+        connection_dbus.insert("type", BONDING_KEY.into());
+        let bond_dbus = bonding_config_to_dbus(bond);
+        for (k, v) in bond_dbus {
             result.insert(k, v);
         }
     }
@@ -54,6 +68,13 @@ pub fn connection_from_dbus(conn: OwnedNestedHash) -> Option<Connection> {
         return Some(Connection::Wireless(WirelessConnection {
             base,
             wireless: wireless_config,
+        }));
+    }
+
+    if let Some(bonding_config) = bonding_config_from_dbus(&conn) {
+        return Some(Connection::Bonding(BondingConnection {
+            base,
+            bonding: bonding_config,
         }));
     }
 
@@ -208,6 +229,38 @@ fn wireless_config_to_dbus(conn: &WirelessConnection) -> NestedHash {
     NestedHash::from([
         ("802-11-wireless", wireless),
         ("802-11-wireless-security", security),
+    ])
+}
+/// Retrieves the slave-type based on given iface_name
+pub fn find_slave_type(net_state: &NetworkState, iface_name: &str) -> Option<String> {
+
+    let conn = net_state.get_connection_by_interface(iface_name)?;
+    if let Connection::Bonding(_) = conn {
+        return Some(String::from("bond"))
+    }
+    None
+}
+
+fn bonding_config_to_dbus(conn: &BondingConnection) -> NestedHash {
+    let config = &conn.bonding;
+    let mut options: HashMap<&str, String> = HashMap::new();
+    options.insert("mode", config.mode.to_string());
+
+    if let Some(m) = &config.miimon {
+        options.insert("miimon", m.frequency.to_string());
+    }
+
+    if let Some(p) = &config.primary {
+        options.insert("primary", p.clone());
+    }
+
+    let bonding: HashMap<&str, zvariant::Value> = HashMap::from([
+        // mode=active-backup,downdelay=0,miimon=100,primary=enp7s0,updelay=0
+          ("options", Value::new(options))
+    ]);
+
+    NestedHash::from([
+        ("bond", bonding ),
     ])
 }
 
@@ -382,6 +435,7 @@ fn nameservers_from_dbus(dns_data: &OwnedValue) -> Option<Vec<IpAddr>> {
         let server: &str = server.downcast_ref()?;
         servers.push(server.parse().unwrap());
     }
+
     Some(servers)
 }
 
@@ -410,6 +464,11 @@ fn wireless_config_from_dbus(conn: &OwnedNestedHash) -> Option<WirelessConfig> {
     }
 
     Some(wireless_config)
+}
+
+fn bonding_config_from_dbus(_conn: &OwnedNestedHash) -> Option<BondingConfig> {
+    // TODO
+    None
 }
 
 /// Determines whether a value is empty.
@@ -503,7 +562,6 @@ mod test {
         let ip_config = connection.ip_config();
         let match_config = connection.match_config();
         assert_eq!(match_config.kernel, vec!["pci-0000:00:19.0"]);
-
         assert_eq!(
             ip_config.addresses,
             vec![
@@ -627,7 +685,6 @@ mod test {
                 Value::new(vec!["192.168.1.1"]).to_owned(),
             ),
         ]);
-
         let ipv6 = HashMap::from([
             (
                 "method".to_string(),
@@ -642,7 +699,6 @@ mod test {
                 Value::new(vec!["::ffff:c0a8:102"]).to_owned(),
             ),
         ]);
-
         original.insert("connection".to_string(), connection);
         original.insert("ipv4".to_string(), ipv4);
         original.insert("ipv6".to_string(), ipv6);
@@ -755,5 +811,6 @@ mod test {
         let ipv4_dbus = conn_dbus.get("ipv4").unwrap();
         let gateway: &str = ipv4_dbus.get("gateway").unwrap().downcast_ref().unwrap();
         assert_eq!(gateway, "192.168.0.1");
+
     }
 }

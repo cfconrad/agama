@@ -53,6 +53,13 @@ impl NetworkState {
         self.connections.iter_mut().find(|c| c.id() == id)
     }
 
+    /// Get connection by InterfaceName
+    ///
+    /// * `name`: connection name
+    pub fn get_connection_by_interface(&self, name: &str) -> Option<&Connection> {
+        self.connections.iter().find(|c| c.interface() == name)
+    }
+
     /// Adds a new connection.
     ///
     /// It uses the `id` to decide whether the connection already exists.
