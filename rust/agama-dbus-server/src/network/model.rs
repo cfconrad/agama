@@ -219,6 +219,7 @@ pub enum Connection {
     Ethernet(EthernetConnection),
     Wireless(WirelessConnection),
     Loopback(LoopbackConnection),
+    Bonding(BondingConnection),
 }
 
 impl Connection {
@@ -234,6 +235,10 @@ impl Connection {
             }),
             DeviceType::Loopback => Connection::Loopback(LoopbackConnection { base }),
             DeviceType::Ethernet => Connection::Ethernet(EthernetConnection { base }),
+            DeviceType::Bonding => Connection::Bonding(BondingConnection {
+                base,
+                ..Default::default()
+            }),
         }
     }
 
@@ -244,6 +249,7 @@ impl Connection {
             Connection::Ethernet(conn) => &conn.base,
             Connection::Wireless(conn) => &conn.base,
             Connection::Loopback(conn) => &conn.base,
+            Connection::Bonding(conn) => &conn.base,
         }
     }
 
@@ -252,6 +258,7 @@ impl Connection {
             Connection::Ethernet(conn) => &mut conn.base,
             Connection::Wireless(conn) => &mut conn.base,
             Connection::Loopback(conn) => &mut conn.base,
+            Connection::Bonding(conn) => &mut conn.base,
         }
     }
 
@@ -314,6 +321,7 @@ pub struct BaseConnection {
     pub status: Status,
     pub interface: String,
     pub match_config: MatchConfig,
+    pub master: Option<String>,
 }
 
 impl PartialEq for BaseConnection {
@@ -408,6 +416,69 @@ pub struct LoopbackConnection {
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
+pub struct BondingConnection {
+    pub base: BaseConnection,
+    pub bonding: BondingConfig,
+}
+
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct BondingConfig {
+    pub mode: BondingMode,
+    pub miimon: Option<MiimonConfig>,
+    pub primary: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub enum BondingMode {
+    #[default]
+    BalanceRR = 0,
+    ActiveBackup = 1,
+    BalanceXor = 2,
+    Broadcase = 3,
+    Ieee802_3ad = 4,
+    BalanceTlb = 5,
+    BalanceAlb = 6,
+}
+
+impl TryFrom<&str> for BondingMode {
+    type Error = NetworkStateError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "balance-rr" => Ok(BondingMode::BalanceRR),
+            "active-backup" => Ok(BondingMode::ActiveBackup),
+            "balance-xor" => Ok(BondingMode::BalanceXor),
+            "broadcase" => Ok(BondingMode::Broadcase),
+            "ieee802-2ad" => Ok(BondingMode::Ieee802_3ad),
+            "balance-tlb" => Ok(BondingMode::BalanceTlb),
+            "balance-alb" => Ok(BondingMode::BalanceAlb),
+            _ => Err(NetworkStateError::InvalidBondingMode(value.to_string())),
+        }
+    }
+}
+
+impl fmt::Display for BondingMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match &self {
+            BondingMode::BalanceRR => "balance-rr",
+            BondingMode::ActiveBackup => "active-backup",
+            BondingMode::BalanceXor => "balance-xor",
+            BondingMode::Broadcase => "broadcase",
+            BondingMode::Ieee802_3ad => "ieee802-2ad",
+            BondingMode::BalanceTlb => "balance-tlb",
+            BondingMode::BalanceAlb => "balance-alb",
+        };
+        write!(f, "{}", name)
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct MiimonConfig {
+    pub frequency: u32,
+    pub carrier_detect: String,
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct WirelessConfig {
     pub mode: WirelessMode,
     pub ssid: SSID,
