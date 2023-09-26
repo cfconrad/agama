@@ -22,6 +22,7 @@ fn replace_colons(colon_string: String) -> String {
 
 pub async fn read_dir(path: PathBuf) -> Result<Vec<Interface>, io::Error> {
     let interfaces = fs::read_dir(path)?
+        .filter(|r| !r.as_ref().unwrap().path().is_dir())
         .map(|res| res.map(|e| read_xml(e.path()).unwrap()))
         .collect::<Result<Vec<_>, io::Error>>()?;
     Ok(interfaces)

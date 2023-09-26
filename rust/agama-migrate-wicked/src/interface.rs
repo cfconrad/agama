@@ -1,7 +1,6 @@
-use agama_dbus_server::network::model::{self, IpConfig, IpMethod};
-use agama_lib::network::types::DeviceType;
+use agama_dbus_server::network::model::{self, IpConfig, IpMethod, BondingMode, MiimonConfig};
 use cidr::IpInet;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::str::FromStr;
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
@@ -17,6 +16,8 @@ pub struct Interface {
     pub ipv6: Ipv6,
     #[serde(rename = "ipv6-static", skip_serializing_if = "Option::is_none")]
     pub ipv6_static: Option<Ipv6Static>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bond: Option<Bond>,
 }
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
@@ -31,7 +32,10 @@ pub struct Firewall {}
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
-pub struct Link {}
+pub struct Link {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub master: Option<String>,
+}
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -68,13 +72,97 @@ pub struct Address {
     pub local: String,
 }
 
-impl From<Interface> for model::Connection {
-    fn from(val: Interface) -> Self {
-        let mut con = model::Connection::new(val.name.clone(), DeviceType::Ethernet);
-        let base_connection = con.base_mut();
-        base_connection.interface = val.name.clone();
-        base_connection.ip_config = (&val).into();
-        con
+#[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct Bond {
+    pub mode: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub miimon: Option<Miimon>,
+    #[serde(deserialize_with = "unwrap_slaves")]
+    pub slaves: Vec<Slave>,
+}
+
+impl Bond {
+    pub fn primary(self: &Bond) -> Option<&String> {
+        for s in self.slaves.iter() {
+            if s.primary.is_some() && s.primary.unwrap(){
+                return Some(&s.device);
+            }
+        }
+        None
+    }
+}
+
+#[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct Slave {
+    pub device: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub primary: Option<bool>,
+}
+
+#[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
+pub struct Miimon {
+    pub frequency: u32,
+    #[serde(rename = "carrier-detect")]
+    pub carrier_detect: String,
+}
+
+fn unwrap_slaves<'de, D>(deserializer: D) -> Result<Vec<Slave>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
+    struct Slaves {
+        // default allows empty list
+        #[serde(default)]
+        slave: Vec<Slave>,
+    }
+    Ok(Slaves::deserialize(deserializer)?.slave)
+}
+
+impl Into<model::Connection> for Interface {
+    fn into(self) -> model::Connection {
+
+        println!("{:#?}", self);
+
+        let base = model::BaseConnection {
+                id: self.name.clone(),
+                interface: self.name.clone(),
+                ip_config: (&self).into(),
+                master: (&self).link.master.clone(),
+                ..Default::default()
+        };
+
+        if let Some(b) = &self.bond {
+
+            let mut bonding = model::BondingConfig {
+                primary: match b.primary() {
+                    Some(x) => Some(x.clone()),
+                    _ => None
+                },
+                ..Default::default()
+            };
+
+            bonding.mode =  BondingMode::try_from(b.mode.as_str()).unwrap();
+
+            if let Some(m) = &b.miimon {
+                bonding.miimon = Some(MiimonConfig {
+                    frequency: m.frequency,
+                    ..Default::default()
+                });
+            }
+
+            return model::Connection::Bonding(model::BondingConnection {
+                base,
+                bonding,
+                ..Default::default()
+            })
+
+        } else {
+            return model::Connection::Ethernet(model::EthernetConnection {
+                base,
+                ..Default::default()
+            });
+        }
     }
 }
 
