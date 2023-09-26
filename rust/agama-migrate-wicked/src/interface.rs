@@ -1,6 +1,5 @@
-use agama_dbus_server::network::model::{self, IpAddress, IpMethod, Ipv4Config, 
+use agama_dbus_server::network::model::{self, IpAddress, IpMethod, Ipv4Config,
     BondingMode, MiimonConfig};
-use agama_lib::network::types::DeviceType;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::str::FromStr;
 
@@ -17,7 +16,7 @@ pub struct Interface {
     pub ipv6: Ipv6,
     #[serde(rename = "ipv6-static", skip_serializing_if = "Option::is_none")]
     pub ipv6_static: Option<Ipv6Static>,
-    
+
 //    #[serde(rename = "ipv6-dhcp", skip_serializing_if = "Option::is_none")]
 //    pub ipv6_dhcp: Option<Ipv6Static>,
 
@@ -39,7 +38,10 @@ pub struct Firewall {}
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
-pub struct Link {}
+pub struct Link {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub master: Option<String>,
+}
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -100,6 +102,17 @@ pub struct Bond {
     pub slaves: Vec<Slave>,
 }
 
+impl Bond {
+    pub fn primary(self: &Bond) -> Option<&String> {
+        for s in self.slaves.iter() {
+            if s.primary.is_some() && s.primary.unwrap(){
+                return Some(&s.device);
+            }
+        }
+        None
+    }
+}
+
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct Slave {
     pub device: String,
@@ -130,65 +143,71 @@ where
 impl Into<model::Connection> for Interface {
     fn into(self) -> model::Connection {
 
-        let mut base = model::BaseConnection { 
-                id: self.name.clone(), 
+        let base = model::BaseConnection {
+                id: self.name.clone(),
                 interface: self.name.clone(),
-                ipv4: self.into(),
-                ..Default::default() 
+                ipv4: (&self).into(),
+                master: (&self).link.master.clone(),
+                ..Default::default()
         };
 
         if let Some(b) = &self.bond {
 
-            let mut bond = model::BondingConfig {
-                ..Default::default() 
+            let mut bonding = model::BondingConfig {
+                primary: match b.primary() {
+                    Some(x) => Some(x.clone()),
+                    _ => None
+                },
+                ..Default::default()
             };
 
-            bond.mode =  BondingMode::try_from(b.mode.as_str()).unwrap();
+            bonding.mode =  BondingMode::try_from(b.mode.as_str()).unwrap();
 
             if let Some(m) = &b.miimon {
-                bond.miimon = Some(MiimonConfig {
+                bonding.miimon = Some(MiimonConfig {
                     frequency: m.frequency,
                     ..Default::default()
                 });
             }
 
             return model::Connection::Bonding(model::BondingConnection {
-                base: base,
-                bonding: bond,
+                base,
+                bonding,
                 ..Default::default()
             })
 
         } else {
             return model::Connection::Ethernet(model::EthernetConnection {
-                base: base,
+                base,
                 ..Default::default()
             });
         }
     }
 }
 
-impl Into<Ipv4Config> for Interface {
-    fn into(self) -> Ipv4Config {
-        let method = if self.ipv4.enabled && self.ipv4_static.is_some() {
+impl From<&Interface> for Ipv4Config {
+    fn from(i: &Interface) -> Ipv4Config {
+        let method = if i.ipv4.enabled && i.ipv4_static.is_some() {
             "manual"
-        } else if !self.ipv4.enabled {
+        } else if !i.ipv4.enabled {
             "disabled"
         } else {
             "auto"
         };
+        let method = IpMethod::from_str(method).unwrap();
 
-        let mut ipv4 = Ipv4Config::default();
-        if self.ipv4_static.is_some() {
-            ipv4.addresses =
+        let addresses = if i.ipv4_static.is_some() {
                 vec![
-                    IpAddress::from_str(&self.ipv4_static.unwrap().address.local.as_str()).unwrap(),
+                    IpAddress::from_str(i.ipv4_static.as_ref().unwrap().address.local.as_str()).unwrap(),
                 ]
-        }
-        ipv4.method = IpMethod::from_str(method).unwrap();
+        } else {
+            vec![]
+        };
 
-        ipv4
+        Ipv4Config { method, addresses, ..Default::default() }
     }
 }
+
 
 #[cfg(test)]
 mod tests {

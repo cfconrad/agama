@@ -1,0 +1,15 @@
+<interface origin="compat:suse:/etc/sysconfig/network/ifcfg-bond0">
+  <name>en1</name>
+  <control>
+    <mode>hotplug</mode>
+  </control>
+  <link>
+    <master>bond0</master>
+  </link>
+  <ipv4>
+    <enabled>false</enabled>
+  </ipv4>
+  <ipv6>
+    <enabled>false</enabled>
+  </ipv6>
+</interface>

@@ -13,6 +13,7 @@ use uuid::Uuid;
 use zbus::zvariant::{self, Value};
 
 const ETHERNET_KEY: &str = "802-3-ethernet";
+const BONDING_KEY: &str = "bond";
 const WIRELESS_KEY: &str = "802-11-wireless";
 const WIRELESS_SECURITY_KEY: &str = "802-11-wireless-security";
 const LOOPBACK_KEY: &str = "loopback";
@@ -20,18 +21,89 @@ const LOOPBACK_KEY: &str = "loopback";
 /// Converts a connection struct into a HashMap that can be sent over D-Bus.
 ///
 /// * `conn`: Connection to convert.
-pub fn connection_to_dbus(conn: &Connection) -> NestedHash {
+pub fn print_val(v : &zvariant::Value)
+{
+    let sig = &v.value_signature();
+    if sig == "s" {
+        let v :zvariant::Str = zvariant::Str::try_from(v).unwrap();
+        print!("{}", v);
+    } else if sig.starts_with("a{ss}") {
+        let dict : zvariant::Dict = zvariant::Dict::try_from(v).unwrap();
+
+//        let h: Result<HashMap<String, String>, _> = dict.try_into();
+//        let h: HashMap<&str, &str> = dict.into();
+        let h: HashMap<String, String> = HashMap::try_from(dict).unwrap();
+        print!("{{");
+        for (_,(k, v)) in h.iter().enumerate()
+        {
+            print!("{}:{}, ", k, v);
+        }
+        print!("}}");
+    } else if sig.starts_with("a") {
+        let v: zvariant::Array = zvariant::Array::try_from(v).unwrap();
+        print!("[");
+        for (_, i) in v.iter().enumerate() {
+            print_val(i);
+            print!(",");
+        }
+        print!("]");
+    } else {
+        print!("Unknown type {}", v.value_signature());
+    }
+}
+pub fn print_hashmap(h : &HashMap<&str, zvariant::Value>)
+{
+    for (_, (k,v)) in h.iter().enumerate() {
+        print!("  {:10}({}): ", k, v.value_signature());
+        print_val(&v);
+        println!("");
+    }
+}
+
+pub fn print_nested_hash(h: &NestedHash)
+{
+    println!("{{");
+    let mut vec = Vec::new();
+    for (_, (k,_)) in h.iter().enumerate(){
+        vec.push(k);
+    }
+    vec.sort();
+
+    for k in vec {
+        if let Some(e) = h.get(k) {
+            println!("{:10}", k);
+            print_hashmap(e);
+        }
+    }
+
+    println!("}}");
+}
+
+pub fn find_slave_type(net_state: &NetworkState, iface_name: &str) -> Option<String> {
+
+    let conn = net_state.get_connection_by_interface(iface_name)?;
+    if let Connection::Bonding(_) = conn {
+        return Some(String::from("bond"))
+    }
+    None
+}
+
+pub fn connection_to_dbus<'a>(net_state: &'a NetworkState, conn: &'a Connection) -> NestedHash<'a>{
     let mut result = NestedHash::new();
     let mut connection_dbus = HashMap::from([
         ("id", conn.id().into()),
         ("type", ETHERNET_KEY.into()),
         ("interface-name", conn.interface().into()),
     ]);
+    if let Some(master) = &conn.base().master {
+        connection_dbus.insert("master", master.into());
+        connection_dbus.insert("slave-type", find_slave_type(net_state, master).unwrap().into());
+    }
     result.insert("ipv4", ipv4_to_dbus(conn.ipv4()));
     result.insert("match", match_config_to_dbus(conn.match_config()));
 
     if let Connection::Wireless(wireless) = conn {
-        connection_dbus.insert("type", "802-11-wireless".into());
+        connection_dbus.insert("type", WIRELESS_KEY.into());
         let wireless_dbus = wireless_config_to_dbus(wireless);
         for (k, v) in wireless_dbus {
             result.insert(k, v);
@@ -39,14 +111,19 @@ pub fn connection_to_dbus(conn: &Connection) -> NestedHash {
     }
 
     if let Connection::Bonding(bond) = conn {
-        connection_dbus.insert("type", "bonding".into());
+        connection_dbus.insert("type", BONDING_KEY.into());
         let bond_dbus = bonding_config_to_dbus(bond);
+        println!("\nCLEMIX\n BOnd: {:?}", bond_dbus);
         for (k, v) in bond_dbus {
+            println!("Add key: {}", k);
             result.insert(k, v);
         }
     }
 
     result.insert("connection", connection_dbus);
+
+
+    print_nested_hash(&result);
     result
 }
 
@@ -60,6 +137,13 @@ pub fn connection_from_dbus(conn: OwnedNestedHash) -> Option<Connection> {
         return Some(Connection::Wireless(WirelessConnection {
             base,
             wireless: wireless_config,
+        }));
+    }
+
+    if let Some(bonding_config) = bonding_config_from_dbus(&conn) {
+        return Some(Connection::Bonding(BondingConnection {
+            base,
+            bonding: bonding_config,
         }));
     }
 
@@ -183,23 +267,24 @@ fn wireless_config_to_dbus(conn: &WirelessConnection) -> NestedHash {
 
 fn bonding_config_to_dbus(conn: &BondingConnection) -> NestedHash {
     let config = &conn.bonding;
-    let mut options = String::from("mode=");
-    options.push_str(&config.mode.to_string());
+    let mut options: HashMap<&str, String> = HashMap::new();
+    options.insert("mode", config.mode.to_string());
 
-    if config.miimon.is_some() {
-        options.push_str(&format!(",miimon={}", config.miimon.as_ref().unwrap().frequency));
+    if let Some(m) = &config.miimon {
+        options.insert("miimon", m.frequency.to_string());
+    }
+
+    if let Some(p) = &config.primary {
+        options.insert("primary", p.clone());
     }
 
     let bonding: HashMap<&str, zvariant::Value> = HashMap::from([
-
         // mode=active-backup,downdelay=0,miimon=100,primary=enp7s0,updelay=0
           ("options", Value::new(options))
-//        ("mode", Value::new(config.mode.to_string())),
-//        ("ssid", Value::new(config.ssid.to_vec())),
     ]);
 
     NestedHash::from([
-        ("bond", bonding),
+        ("bond", bonding ),
     ])
 }
 
@@ -406,6 +491,31 @@ fn wireless_config_from_dbus(conn: &OwnedNestedHash) -> Option<WirelessConfig> {
 
     Some(wireless_config)
 }
+
+fn bonding_config_from_dbus(conn: &OwnedNestedHash) -> Option<BondingConfig> {
+    let Some(bonding) = conn.get(BONDING_KEY) else {
+        return None;
+    };
+
+    let mut bonding_config = BondingConfig{ ..Default::default() };
+/*
+    let options = bonding.get("options")?;
+    let options: &zvariant::Dict = options.downcast_ref()?;
+///
+
+    bonding_config.mode = BondingMode::try_from(options.get("mode")?);
+
+    if let Some(miimon) = options.get("miimon") {
+        bonding_config.miimon = Some(MiimonConfig {
+                frequency: miimon.parse().unwrap(),
+                ..Default::default()
+            });
+    };
+    bonding_config.primary = options.get("primary").cloned();
+*/
+    Some(bonding_config)
+}
+
 
 /// Determines whether a value is empty.
 ///
