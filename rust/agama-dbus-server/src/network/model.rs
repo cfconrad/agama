@@ -328,7 +328,7 @@ pub struct BaseConnection {
     pub status: Status,
     pub interface: String,
     pub match_config: MatchConfig,
-    pub master: Option<String>,
+    pub parent: Option<String>,
 }
 
 impl PartialEq for BaseConnection {

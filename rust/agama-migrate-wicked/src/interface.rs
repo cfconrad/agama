@@ -33,8 +33,8 @@ pub struct Firewall {}
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Link {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub master: Option<String>,
+    #[serde(rename = "master", skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
@@ -77,13 +77,13 @@ pub struct Bond {
     pub mode: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub miimon: Option<Miimon>,
-    #[serde(deserialize_with = "unwrap_slaves")]
-    pub slaves: Vec<Slave>,
+    #[serde(rename = "slaves", deserialize_with = "unwrap_ports")]
+    pub ports: Vec<Port>,
 }
 
 impl Bond {
     pub fn primary(self: &Bond) -> Option<&String> {
-        for s in self.slaves.iter() {
+        for s in self.ports.iter() {
             if s.primary.is_some() && s.primary.unwrap(){
                 return Some(&s.device);
             }
@@ -93,7 +93,7 @@ impl Bond {
 }
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
-pub struct Slave {
+pub struct Port {
     pub device: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub primary: Option<bool>,
@@ -106,17 +106,17 @@ pub struct Miimon {
     pub carrier_detect: String,
 }
 
-fn unwrap_slaves<'de, D>(deserializer: D) -> Result<Vec<Slave>, D::Error>
+fn unwrap_ports<'de, D>(deserializer: D) -> Result<Vec<Port>, D::Error>
 where
     D: Deserializer<'de>,
 {
     #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
-    struct Slaves {
+    struct Ports {
         // default allows empty list
-        #[serde(default)]
-        slave: Vec<Slave>,
+        #[serde(default, rename = "slave")]
+        port: Vec<Port>,
     }
-    Ok(Slaves::deserialize(deserializer)?.slave)
+    Ok(Ports::deserialize(deserializer)?.port)
 }
 
 impl Into<model::Connection> for Interface {
@@ -128,7 +128,7 @@ impl Into<model::Connection> for Interface {
                 id: self.name.clone(),
                 interface: self.name.clone(),
                 ip_config: (&self).into(),
-                master: (&self).link.master.clone(),
+                parent: (&self).link.parent.clone(),
                 ..Default::default()
         };
 

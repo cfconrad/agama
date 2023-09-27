@@ -30,9 +30,9 @@ pub fn connection_to_dbus<'a>(net: &'a NetworkState, conn: &'a Connection) -> Ne
         ("type", ETHERNET_KEY.into()),
         ("interface-name", conn.interface().into()),
     ]);
-    if let Some(master) = &conn.base().master {
-        connection_dbus.insert("master", master.into());
-        connection_dbus.insert("slave-type", find_slave_type(net, master).unwrap().into());
+    if let Some(parent) = &conn.base().parent {
+        connection_dbus.insert("master", parent.into());
+        connection_dbus.insert("slave-type", find_slave_type(net, parent).unwrap().into());
     }
     result.insert("ipv4", ip_config_to_ipv4_dbus(conn.ip_config()));
     result.insert("ipv6", ip_config_to_ipv6_dbus(conn.ip_config()));
