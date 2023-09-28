@@ -2,6 +2,7 @@ use crate::interface::Interface;
 use agama_dbus_server::network::model::ParentKind;
 use quick_xml::de::from_str;
 use regex::Regex;
+use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
@@ -22,17 +23,21 @@ fn replace_colons(colon_string: String) -> String {
 }
 
 pub fn post_process_interface(interfaces: &mut Vec<Interface>){
-    for i in interfaces.iter_mut() {
-
+    let mut helper = HashMap::new();
+    for (idx,i) in interfaces.iter().enumerate() {
         if let Some(parent) = &i.link.parent {
             for j in interfaces.iter() {
                 if j.name == *parent {
-                    // TODO
                     if let Some(_) = &j.bond {
-                        i.link.kind = Some(ParentKind::Bond);
+                        helper.insert(idx, Some(ParentKind::Bond));
                     }
                 }
             }
+        }
+    }
+    for (_, (k, v)) in helper.iter().enumerate() {
+        if let Some(ifc) = interfaces.get_mut(*k) {
+            (*ifc).link.kind = v.clone();
         }
     }
 }
