@@ -11,6 +11,7 @@ use std::{
     net::IpAddr,
     str::{self, FromStr},
 };
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -320,6 +321,41 @@ impl Connection {
     }
 }
 
+#[derive(Debug, Default, PartialEq, Clone, Serialize, Deserialize)]
+pub enum ParentKind {
+    #[default]
+    None,
+    Bond,
+}
+
+impl fmt::Display for ParentKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match &self {
+            ParentKind::None => "",
+            ParentKind::Bond => "bond",
+        };
+        write!(f, "{}", name)
+    }
+}
+
+impl FromStr for ParentKind {
+    type Err = NetworkStateError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "" => Ok(ParentKind::None),
+            "bond" => Ok(ParentKind::Bond),
+            _ => Err(NetworkStateError::UnknownParentKind(s.to_string())),
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct Parent {
+    pub interface: String,
+    pub kind: ParentKind,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct BaseConnection {
     pub id: String,
@@ -328,7 +364,7 @@ pub struct BaseConnection {
     pub status: Status,
     pub interface: String,
     pub match_config: MatchConfig,
-    pub parent: Option<String>,
+    pub parent: Option<Parent>,
 }
 
 impl PartialEq for BaseConnection {

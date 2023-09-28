@@ -2,7 +2,6 @@
 use super::dbus::{connection_from_dbus, connection_to_dbus, merge_dbus_connections};
 use super::model::NmDeviceType;
 use super::proxies::{ConnectionProxy, DeviceProxy, NetworkManagerProxy, SettingsProxy};
-use crate::network::NetworkState;
 use crate::network::model::{Connection, Device};
 use agama_lib::error::ServiceError;
 use log;
@@ -89,8 +88,8 @@ impl<'a> NetworkManagerClient<'a> {
     /// Adds or updates a connection if it already exists.
     ///
     /// * `conn`: connection to add or update.
-    pub async fn add_or_update_connection(&self, net_state: &NetworkState, conn: &Connection) -> Result<(), ServiceError> {
-        let new_conn = connection_to_dbus(net_state, conn);
+    pub async fn add_or_update_connection(&self, conn: &Connection) -> Result<(), ServiceError> {
+        let new_conn = connection_to_dbus(conn);
         let path = if let Ok(proxy) = self.get_connection_proxy(conn.uuid()).await {
             let original = proxy.get_settings().await?;
             let merged = merge_dbus_connections(&original, &new_conn);

@@ -1,4 +1,4 @@
-use agama_dbus_server::network::model::{self, IpConfig, IpMethod, BondingMode, MiimonConfig};
+use agama_dbus_server::network::model::{self, IpConfig, IpMethod, BondingMode, MiimonConfig, ParentKind, Parent};
 use cidr::IpInet;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::str::FromStr;
@@ -35,6 +35,8 @@ pub struct Firewall {}
 pub struct Link {
     #[serde(rename = "master", skip_serializing_if = "Option::is_none")]
     pub parent: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<ParentKind>,
 }
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
@@ -124,14 +126,23 @@ impl Into<model::Connection> for Interface {
 
         println!("{:#?}", self);
 
-        let base = model::BaseConnection {
+        let mut base = model::BaseConnection {
                 id: self.name.clone(),
                 interface: self.name.clone(),
                 ip_config: (&self).into(),
-                parent: (&self).link.parent.clone(),
                 ..Default::default()
         };
 
+        if self.link.kind.is_some() && self.link.parent.is_some() {
+//        if let Some(parent_type) = &self.link.kind {
+            let interface = (&self).link.parent.clone().unwrap();
+            let kind = (&self).link.kind.clone().unwrap();
+            base.parent = Some(Parent {
+                 interface,
+                 kind,
+                 ..Default::default()
+            });
+        }
         if let Some(b) = &self.bond {
 
             let mut bonding = model::BondingConfig {

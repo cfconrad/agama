@@ -1,4 +1,5 @@
 use crate::interface::Interface;
+use agama_dbus_server::network::model::ParentKind;
 use quick_xml::de::from_str;
 use regex::Regex;
 use std::fs;
@@ -20,10 +21,28 @@ fn replace_colons(colon_string: String) -> String {
     replaced
 }
 
+pub fn post_process_interface(interfaces: &mut Vec<Interface>){
+    for i in interfaces.iter_mut() {
+
+        if let Some(parent) = &i.link.parent {
+            for j in interfaces.iter() {
+                if j.name == *parent {
+                    // TODO
+                    if let Some(_) = &j.bond {
+                        i.link.kind = Some(ParentKind::Bond);
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub async fn read_dir(path: PathBuf) -> Result<Vec<Interface>, io::Error> {
-    let interfaces = fs::read_dir(path)?
+    let mut interfaces = fs::read_dir(path)?
         .filter(|r| !r.as_ref().unwrap().path().is_dir())
         .map(|res| res.map(|e| read_xml(e.path()).unwrap()))
         .collect::<Result<Vec<_>, io::Error>>()?;
+
+    post_process_interface(&mut interfaces);
     Ok(interfaces)
 }

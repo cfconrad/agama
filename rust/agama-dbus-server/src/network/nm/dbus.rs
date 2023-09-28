@@ -23,7 +23,7 @@ const LOOPBACK_KEY: &str = "loopback";
 ///
 /// * `net`: The full NetworkState -- used for correlations between interfaces.
 /// * `conn`: Connection to convert.
-pub fn connection_to_dbus<'a>(net: &'a NetworkState, conn: &'a Connection) -> NestedHash<'a>{
+pub fn connection_to_dbus(conn: &Connection) -> NestedHash{
     let mut result = NestedHash::new();
     let mut connection_dbus = HashMap::from([
         ("id", conn.id().into()),
@@ -31,8 +31,8 @@ pub fn connection_to_dbus<'a>(net: &'a NetworkState, conn: &'a Connection) -> Ne
         ("interface-name", conn.interface().into()),
     ]);
     if let Some(parent) = &conn.base().parent {
-        connection_dbus.insert("master", parent.into());
-        connection_dbus.insert("slave-type", find_slave_type(net, parent).unwrap().into());
+        connection_dbus.insert("master", parent.interface.clone().into());
+        connection_dbus.insert("slave-type", parent.kind.to_string().into());
     }
     result.insert("ipv4", ip_config_to_ipv4_dbus(conn.ip_config()));
     result.insert("ipv6", ip_config_to_ipv6_dbus(conn.ip_config()));
@@ -230,15 +230,6 @@ fn wireless_config_to_dbus(conn: &WirelessConnection) -> NestedHash {
         ("802-11-wireless", wireless),
         ("802-11-wireless-security", security),
     ])
-}
-/// Retrieves the slave-type based on given iface_name
-pub fn find_slave_type(net_state: &NetworkState, iface_name: &str) -> Option<String> {
-
-    let conn = net_state.get_connection_by_interface(iface_name)?;
-    if let Connection::Bonding(_) = conn {
-        return Some(String::from("bond"))
-    }
-    None
 }
 
 fn bonding_config_to_dbus(conn: &BondingConnection) -> NestedHash {
