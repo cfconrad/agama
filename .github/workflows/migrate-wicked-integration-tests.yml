@@ -17,7 +17,7 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Start container
-      run: podman run --privileged --detach --name migrate-wicked --ipc=host -e CARGO_TERM_COLOR=always -v /dev:/dev -v .:/checkout registry.opensuse.org/home/jcronenberg/github-ci/containers/opensuse/migrate-wicked-testing:latest
+      run: podman run --detach --name migrate-wicked -e CARGO_TERM_COLOR=always -v .:/checkout registry.opensuse.org/home/jcronenberg/github-ci/containers/opensuse/migrate-wicked-testing:latest
 
     - name: Build migrate-wicked
       run: podman exec migrate-wicked bash -c "cd /checkout/rust/migrate-wicked/ && cargo build"
