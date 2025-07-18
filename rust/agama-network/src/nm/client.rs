@@ -22,6 +22,8 @@
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::path::Path;
+use std::thread;
+use std::time::Duration;
 
 use super::builder::DeviceFromProxyBuilder;
 use super::dbus::{
@@ -309,6 +311,7 @@ impl<'a> NetworkManagerClient<'a> {
         );
 
         dbg!("enter add_or_update_connection({})", conn.id);
+        thread::sleep(Duration::from_millis(500));
 
         let path = if let Ok(proxy) = self.get_connection_proxy(conn.uuid).await {
             dbg!("get_settings()");
