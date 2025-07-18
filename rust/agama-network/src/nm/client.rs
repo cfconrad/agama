@@ -45,6 +45,17 @@ use uuid::Uuid;
 use zbus;
 use zbus::zvariant::{ObjectPath, OwnedObjectPath};
 
+macro_rules! dbg {
+    ($($arg:tt)*) => ({
+        // Get the file and line number
+        let file = file!();
+        let line = line!();
+        // Use an internal macro to format and print
+        // This avoids issues with string literals and allows for proper formatting of the arguments
+        print!("[{}:{:<4}] ", file, line);
+        println!($($arg)*);
+    });
+}
 /// Simplified NetworkManager D-Bus client.
 ///
 /// Implements a minimal API to be used internally. At this point, it allows to query the list of
@@ -297,14 +308,19 @@ impl<'a> NetworkManagerClient<'a> {
                 .map_err(NmError::FailedNmVersionParse)?,
         );
 
+        dbg!("enter add_or_update_connection({})", conn.id);
+
         let path = if let Ok(proxy) = self.get_connection_proxy(conn.uuid).await {
+            dbg!("get_settings()");
             let original = proxy.get_settings().await?;
+            dbg!("merge_dbus_connections()");
             let merged = merge_dbus_connections(&original, &new_conn)?;
             let persist = if conn.persistent {
                 UpdateFlags::ToDisk
             } else {
                 UpdateFlags::InMemoryOnly
             };
+            dbg!("update2");
             proxy
                 .update2(merged, persist as u32, Default::default())
                 .await?;
@@ -330,6 +346,7 @@ impl<'a> NetworkManagerClient<'a> {
         if conn.is_up() {
             // FIXME: If it is a wireless and wireless is disabled it will fail, and if it is a
             // device which is not available it will also fail.
+            dbg!("activate_connection({})", conn.id);
             self.activate_connection(path).await?;
         } else {
             if conn.is_down() || conn.is_removed() {

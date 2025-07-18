@@ -46,9 +46,22 @@ impl<'a> NetworkManagerAdapter<'a> {
     }
 }
 
+macro_rules! dbg {
+    ($($arg:tt)*) => ({
+        // Get the file and line number
+        let file = file!();
+        let line = line!();
+        // Use an internal macro to format and print
+        // This avoids issues with string literals and allows for proper formatting of the arguments
+        print!("[{}:{:<4}] ", file, line);
+        println!($($arg)*);
+    });
+}
+
 #[async_trait]
 impl Adapter for NetworkManagerAdapter<'_> {
     async fn read(&self, config: StateConfig) -> Result<NetworkState, NetworkAdapterError> {
+        dbg!("enter NetworkManagerAdapter::read()");
         let general_state = self
             .client
             .general_state()
@@ -61,6 +74,7 @@ impl Adapter for NetworkManagerAdapter<'_> {
             state.general_state = general_state.clone();
         }
 
+        dbg!("");
         if config.devices {
             state.devices = self
                 .client
@@ -69,6 +83,7 @@ impl Adapter for NetworkManagerAdapter<'_> {
                 .map_err(|e| NetworkAdapterError::Read(anyhow!(e)))?;
         }
 
+        dbg!("");
         if config.connections {
             state.connections = self
                 .client
@@ -77,6 +92,7 @@ impl Adapter for NetworkManagerAdapter<'_> {
                 .map_err(|e| NetworkAdapterError::Read(anyhow!(e)))?;
         }
 
+        dbg!("");
         if config.access_points && general_state.wireless_enabled {
             if !config.devices && !config.connections {
                 self.client
@@ -92,6 +108,7 @@ impl Adapter for NetworkManagerAdapter<'_> {
                 .map_err(|e| NetworkAdapterError::Read(anyhow!(e)))?;
         }
 
+        dbg!("leave");
         Ok(state)
     }
 
