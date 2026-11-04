@@ -197,6 +197,51 @@ fn test_the_reported_configuration_can_be_sent_back_with_both_lists() {
     }
 }
 
+/// Only bonds and bridges nest their ports, so the members of an Open vSwitch bridge are reported at
+/// the top level. Sending them back as they are must keep the stack, and the IP configuration of
+/// the internal interface, as it is.
+///
+/// ```text
+/// br-ovs (ovs-bridge)  <-  port-ovs (ovs-port)  <-  ifc-ovs (ovs-interface, internal)
+/// ```
+#[test]
+fn test_the_reported_ovs_bridge_can_be_sent_back() {
+    let mut bridge = Connection::new("br-ovs".to_string(), DeviceType::Ethernet);
+    bridge.config = ConnectionConfig::OvsBridge(Default::default());
+    bridge.interface = Some("br-ovs".to_string());
+
+    let mut port = Connection::new("port-ovs".to_string(), DeviceType::Ethernet);
+    port.config = ConnectionConfig::OvsPort(Default::default());
+    port.interface = Some("port-ovs".to_string());
+    port.controller = Some(bridge.uuid);
+
+    let mut interface = Connection::new("ifc-ovs".to_string(), DeviceType::Ethernet);
+    interface.config = ConnectionConfig::OvsInterface(OvsInterfaceConfig {
+        interface_type: OvsInterfaceType::Internal,
+    });
+    interface.interface = Some("ifc-ovs".to_string());
+    interface.controller = Some(port.uuid);
+    interface.ip_config.method4 = Some(Ipv4Method::Manual);
+    interface.ip_config.addresses = vec!["192.168.1.10/24".parse().unwrap()];
+
+    let mut state = NetworkState::default();
+    for conn in [bridge, port, interface] {
+        state.add_connection(conn).unwrap();
+    }
+    let before = state.connections.clone();
+
+    let reported = exposed(&state);
+    assert_eq!(root_ids(&reported), ["br-ovs", "ifc-ovs", "port-ovs"]);
+    apply(&mut state, reported);
+
+    for original in &before {
+        let conn = state.get_connection(&original.id).unwrap();
+        assert!(!conn.is_removed(), "{}", original.id);
+        assert_eq!(conn.controller, original.controller, "{}", original.id);
+        assert_eq!(conn.ip_config, original.ip_config, "{}", original.id);
+    }
+}
+
 /// When both lists are given and do not match, `portConnections` decides and `ports` is ignored.
 #[test]
 fn test_port_connections_take_precedence_over_ports() {
