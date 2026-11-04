@@ -932,6 +932,19 @@ pub enum ConnectionConfig {
     OvsInterface(OvsInterfaceConfig),
 }
 
+impl ConnectionConfig {
+    /// Whether the HTTP API nests the ports of a controller of this kind.
+    ///
+    /// Only bonds and bridges list their ports. The members of any other kind of controller, like
+    /// the ports and interfaces of an Open vSwitch bridge, are given at the top level.
+    pub fn nests_ports(&self) -> bool {
+        matches!(
+            self,
+            ConnectionConfig::Bond(_) | ConnectionConfig::Bridge(_)
+        )
+    }
+}
+
 #[derive(Default, Debug, PartialEq, Clone, Deserialize, Serialize, JsonSchema)]
 pub enum PortConfig {
     #[default]
@@ -1552,14 +1565,8 @@ impl ConnectionCollection {
         }
 
         let uuid = conn.controller?;
-        self.iter().find(|c| {
-            c.uuid == uuid
-                && !c.is_removed()
-                && matches!(
-                    c.config,
-                    ConnectionConfig::Bond(_) | ConnectionConfig::Bridge(_)
-                )
-        })
+        self.iter()
+            .find(|c| c.uuid == uuid && !c.is_removed() && c.config.nests_ports())
     }
 
     /// Converts the collection to its HTTP API representation.

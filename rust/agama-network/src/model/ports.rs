@@ -382,6 +382,9 @@ impl<'a> PortResolver<'a> {
     /// * A connection at the top level is not a port. If it was one, it is moved out of its
     ///   controller, and its IP methods default to `auto`: a NIC taken out of a bond should not be
     ///   left without an address.
+    /// * Except for the members of a controller that does not nest its ports (see
+    ///   [`ConnectionConfig::nests_ports`]), like the ports and interfaces of an Open vSwitch
+    ///   bridge. They are always given at the top level, so they keep their controller.
     ///
     /// A port that is dropped from the list of ports of its controller, and that the document does
     /// not mention anywhere else, is removed. Detaching it would leave behind a profile without IP
@@ -431,6 +434,18 @@ impl<'a> PortResolver<'a> {
             .map(|c| c.uuid)
             .collect();
 
+        // The members of a controller that does not nest its ports can only be given at the top
+        // level, so being there does not move them out of it.
+        let unnested: HashSet<Uuid> = conns
+            .iter()
+            .filter(|c| {
+                c.controller
+                    .and_then(|controller| controllers.get(&controller))
+                    .is_some_and(|config| !config.nests_ports())
+            })
+            .map(|c| c.uuid)
+            .collect();
+
         for (index, conn) in conns.iter_mut().enumerate() {
             let node = nodes.get(index);
 
@@ -443,7 +458,10 @@ impl<'a> PortResolver<'a> {
                     conn.port_config = PortConfig::None;
                 }
                 conn.controller = Some(*controller);
-            } else if node.is_some_and(|n| n.parent.is_none()) && conn.controller.is_some() {
+            } else if node.is_some_and(|n| n.parent.is_none())
+                && conn.controller.is_some()
+                && !unnested.contains(&conn.uuid)
+            {
                 tracing::info!("Moving '{}' out of its controller", conn.id);
                 conn.controller = None;
                 conn.port_config = PortConfig::None;
@@ -472,6 +490,10 @@ impl<'a> PortResolver<'a> {
             let Some(controller) = conns.iter().chain(self.known).find(|c| c.uuid == uuid) else {
                 continue;
             };
+            // The members of an Open vSwitch bridge keep their IP settings (see `link`).
+            if !controller.config.nests_ports() {
+                continue;
+            }
 
             // A nested port cannot have IP settings at all. A top-level connection listed by name in
             // a controller is the flat style that profiles used before the ports were nested. They
